@@ -1,4 +1,5 @@
 import logging
+from flask import Flask
 
 # Константы
 MAIN_OWNER = 'selectel'
@@ -21,3 +22,11 @@ templ = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 term = logging.StreamHandler()
 term.setFormatter(templ)
 logger.addHandler(term)
+
+
+app = Flask(__name__)
+app.config.from_object(__name__)
+
+# Загружаем конфиг по умолчанию и переопределяем в конфигурации часть
+# значений через переменную окружения
+app.config.update(dict(DATABASE=DATABASE_NAME, DEBUG=True))

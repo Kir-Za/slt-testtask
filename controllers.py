@@ -1,10 +1,10 @@
 import logging
 from flask import request, json, url_for
-from manage import app
 from config import ENABLED_INFO_CLASSES, SEVER_STATUS_LIST
 from utils import get_common_info, get_detail_server_info, get_detail_rack_info, create_rack, remove_rack, \
     create_and_add_server, add_server_to_rack, remove_server, sell_server, on_optical_port, move_to_del,\
     get_server_status, to_pay, doc_split
+from config import app
 
 module_logger = logging.getLogger('main_log')
 

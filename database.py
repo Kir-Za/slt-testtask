@@ -2,7 +2,7 @@ import os
 import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from config import DATABASE_NAME
+from config import app
 from models import Base
 
 module_logger = logging.getLogger('main_log')
@@ -13,7 +13,7 @@ def create_db_file():
     Создали файл БД в текущей директории
     """
     try:
-        engine = create_engine(''.join(['sqlite:///', DATABASE_NAME]))
+        engine = create_engine(''.join(['sqlite:///', app.config['DATABASE']]))
         Base.metadata.create_all(engine)
         module_logger.info("Создан пустой объект базы данных")
     except Exception as err:
@@ -26,7 +26,7 @@ def create_session():
     :return: объект сессии
     """
     try:
-        engine = create_engine(''.join(['sqlite:///', DATABASE_NAME]))
+        engine = create_engine(''.join(['sqlite:///', app.config['DATABASE']]))
         Base.metadata.bind = engine
         Session = sessionmaker(bind=engine)
         module_logger.info("Сессия работы с базой данных создана")
@@ -41,7 +41,7 @@ def get_session():
     Проверили наличие БД и создали сессию по ней
     :return: объект сессии
     """
-    if DATABASE_NAME not in os.listdir('.'):
+    if app.config['DATABASE'] not in os.listdir('.'):
         module_logger.info("База данных на диске не обнаружена.")
         create_db_file()
     return create_session()
