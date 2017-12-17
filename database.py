@@ -1,9 +1,9 @@
 import os
 import logging
 from sqlalchemy import create_engine
-from config import DATABASE_NAME
 from sqlalchemy.orm import sessionmaker
-from app.models import Base
+from config import DATABASE_NAME
+from models import Base
 
 module_logger = logging.getLogger('main_log')
 

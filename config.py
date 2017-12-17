@@ -1,4 +1,3 @@
-import os
 import logging
 
 # Константы
@@ -22,9 +21,3 @@ templ = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 term = logging.StreamHandler()
 term.setFormatter(templ)
 logger.addHandler(term)
-
-
-
-#class Config(object):
-#    DEBUG = True
-#    SQLALCHEMY_DATABASE_URI = os.environ['DATABASE_URL']

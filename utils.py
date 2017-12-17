@@ -1,21 +1,76 @@
 import logging
+import random
+import re
 from datetime import datetime
-from app.database import get_session
-from app.models import Server, Rack
-from app.utils import check_ip, check_free_slots, activate_server
-from config import MAIN_OWNER, ENABLED_VOLUME, SELECTEL_ADDR, SEVER_STANDART_CORE, SEVER_STATUS_LIST,\
-    START_SERVER_STATUS, ENABLED_INFO_CLASSES
+from time import sleep
 
+from config import MAIN_OWNER, ENABLED_VOLUME, SELECTEL_ADDR, SEVER_STANDART_CORE, SEVER_STATUS_LIST, \
+    START_SERVER_STATUS, ENABLED_INFO_CLASSES, PREPARE_TIME_RANGE
+from database import get_session
+from models import Server, Rack
 
 module_logger = logging.getLogger('main_log')
+
+
+def doc_split(doc):
+    """
+    Пересборка док строки функций
+    :param doc: исходный док
+    :return: форматированный док
+    """
+    raw_doc_list = doc.split('\n    ')[1:-1]
+    return ' '.join([str(x) for x in raw_doc_list])
+
+
+def check_ip(new_ip):
+    """
+    Проверка доступности ip
+    :param new_ip: проверяемый ip в случае его корректности
+    :return: корректный ip
+    """
+    ture_format = re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", new_ip)
+    if ture_format:
+        tmp_session = get_session()
+        server_list = [server.server_ip for server in tmp_session.query(Server).all()]
+        tmp_session.close()
+        if ture_format.group() not in server_list:
+            return ture_format.group()
+    raise AttributeError
+
+
+def check_free_slots(rack):
+    """
+    Проверка наличия свободных слотов
+    :param rack: серверная стойка
+    :return: None
+    """
+    if len(rack.servers) == rack.volume:
+        raise Exception('Ошибка создания и добавления сервера. Серверная стойка не имеет свободных слотов.')
+    elif len(rack.servers) > rack.volume:
+        raise Exception('Ошибка манипуляции с параметрами серверной стойки. Превышено максимально допустимый объем')
+
+
+def activate_server(tmp_session, server):
+    """
+    Перевод оплаченного сервера в активное состояние
+    :param tmp_session: сессия запроса
+    :param server: целевой сервер
+    :return: None
+    """
+    module_logger.info('Выполняется перевод оплаченного сервера в рабочее состояние.'
+                       ' Эта операция может занять некоторе время.')
+    sleep(random.randint(PREPARE_TIME_RANGE[0], PREPARE_TIME_RANGE[1]))
+    server.status = SEVER_STATUS_LIST[2]
+    tmp_session.commit()
+    module_logger.info('Сервер {0} переведен в состояние {1}'.format(str(server.id), SEVER_STATUS_LIST[2]))
 
 
 def create_rack(owner, volume):
     """
     Создание пустой серверной стойки
-    :param owner: Владелец (selectel или иной собственник)
-    :param volume: Тип стойки - на 10 или 20
-    :return: результат сосздания
+    :param owner: Владелец (selectel | иной собственник)
+    :param volume: Тип стойки (10 | 20)
+    :return: id новой стойки
     """
     tmp_session = get_session()
     try:
@@ -32,6 +87,7 @@ def create_rack(owner, volume):
         tmp_session.add(new_rack)
         tmp_session.commit()
         module_logger.info('Новая серверная стойка успешно создана.')
+        return new_rack.id
     except OSError:
         module_logger.error('Ошибка в назначении прав доступа к файловой директории.')
     except Exception as err:
@@ -43,6 +99,8 @@ def create_rack(owner, volume):
 def get_common_info(model_class, sort_by_date=False):
     """
     Получить краткую информацию по наличествующим стойкам.
+    :param model_class: тип запрашиваемой модели (Rack | Server)
+    :param sort_by_date: сортировать по дате (True | False)
     :return: Список стоек/серверов.
     """
     tmp_session = get_session()
@@ -63,6 +121,8 @@ def get_common_info(model_class, sort_by_date=False):
 def get_detail_rack_info(id):
     """
     Получение детальной информации по конкретной стойке
+    :param id: целевой id
+    :return: словарь значимых для серверной стойки параметров
     """
     tmp_session = get_session()
     try:
@@ -85,6 +145,8 @@ def get_detail_rack_info(id):
 def get_detail_server_info(id):
     """
     Получение детальной информации по серверу
+    :param id: целевой id
+    :return: словарь значимых для сервера параметров
     """
     tmp_session = get_session()
     try:
@@ -171,19 +233,22 @@ def add_server_to_rack(server_id, rack_id, new=False):
     """
     Добавление сервера в стойку
     :param server_id: сервер
-    :param rack_id: созданная ранее стойка
-    :param new: добавляется новый или перемещаем существующий
-    :return:
+    :param rack_id: id стойки куда перемещаем сервер
+    :return: id
     """
     tmp_session = get_session()
     try:
         rack = tmp_session.query(Rack).get(int(rack_id))
+        server = tmp_session.query(Server).get(int(server_id))
+        # если перемещаем ранее созданный сервер
         if not new:
             check_free_slots(rack)
-        server = tmp_session.query(Server).get(int(server_id))
+            server.rack_id = None
+            tmp_session.commit()
         rack.servers.append(server)
         tmp_session.commit()
         module_logger.info('В серверную стойку с id={0} добавлен сервер с id={1}'.format(str(rack_id), str(server_id)))
+        return server.id
     except Exception as err:
         module_logger.error(err)
     finally:
@@ -194,6 +259,7 @@ def remove_server(id):
     """
     Удаление сервера.
     :param id: целевой id
+    :return: True
     """
     tmp_session = get_session()
     try:
@@ -204,6 +270,7 @@ def remove_server(id):
         tmp_session.delete(server)
         tmp_session.commit()
         module_logger.info('Удален сервер с id=%s' % str(id))
+        return True
     except Exception as err:
         module_logger.error(err)
     finally:
@@ -215,15 +282,17 @@ def sell_server(id, new_operator):
     Продать сервер
     :param id: целевой id
     :param new_operator: новый пользователь
+    :return: True
     """
     tmp_session = get_session()
     try:
         server = tmp_session.query(Server).get(int(id))
-        if server.status != SEVER_STATUS_LIST[-1]:
+        if server.status == SEVER_STATUS_LIST[-1]:
             raise Exception("Нельзя продать сервер находящийся в состоянии %s" % SEVER_STATUS_LIST[-1])
         server.operator = new_operator
         tmp_session.commit()
         module_logger.info('Сервер продан. Новый оператор - %s' % str(new_operator))
+        return True
     except Exception as err:
         module_logger.error(err)
     finally:
@@ -232,9 +301,9 @@ def sell_server(id, new_operator):
 
 def on_optical_port(id):
     """
-    Продать сервер
+    Включить оптический порт
     :param id: целевой id
-    :param new_operator: новый пользователь
+    :return: True
     """
     tmp_session = get_session()
     try:
@@ -244,6 +313,7 @@ def on_optical_port(id):
         server.optical_port = True
         tmp_session.commit()
         module_logger.info('Сервер %s оснащен оптическим каналом связи' % str(id))
+        return True
     except Exception as err:
         module_logger.error(err)
     finally:
@@ -254,6 +324,7 @@ def move_to_del(id):
     """
     Перевести сервер в состояние Deleted
     :param id: целевой сервер
+    :return: True
     """
     tmp_session = get_session()
     try:
@@ -263,6 +334,7 @@ def move_to_del(id):
         server.status = SEVER_STATUS_LIST[-1]
         tmp_session.commit()
         module_logger.info('Сервер {0} переведен в состояние {1}'.format(str(id), SEVER_STATUS_LIST[-1]))
+        return True
     except Exception as err:
         module_logger.error(err)
     finally:
@@ -273,6 +345,7 @@ def get_server_status(id):
     """
     Запрос состояния
     :param id: целевой сервер
+    :return: статус сервера
     """
     tmp_session = get_session()
     try:
@@ -290,6 +363,7 @@ def to_pay(id):
     """
     Оплатить сервер
     :param id: целевой id
+    :return: текущий статус сервера
     """
     tmp_session = get_session()
     try:
