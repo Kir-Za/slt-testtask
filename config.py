@@ -14,6 +14,7 @@ PREPARE_TIME_RANGE = [5, 15]
 
 # Конфигурация БД
 DATABASE_NAME = 'hardware.db'
+TEST_DATABASE = 'test.db'
 
 # Конфигурация логгера
 logger = logging.getLogger('main_log')
